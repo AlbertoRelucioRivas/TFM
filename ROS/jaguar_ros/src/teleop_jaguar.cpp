@@ -37,7 +37,7 @@
 #include <geometry_msgs/TwistStamped.h>
 #include <actionlib/client/simple_action_client.h>
 
-namespace teleop_crawler
+namespace teleop_jaguar
 {
 
 class Teleop
@@ -277,13 +277,13 @@ public:
   }
 };
 
-} // namespace teleop_crawler
+} // namespace teleop_jaguar
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "teleop_crawler");
+  ros::init(argc, argv, "teleop_jaguar");
 
-  teleop_crawler::Teleop teleop;
+  teleop_jaguar::Teleop teleop;
   teleop.Usage();
   teleop.publish_flipper();
   ros::spin();

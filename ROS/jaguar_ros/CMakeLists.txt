@@ -128,6 +128,9 @@ include
 add_executable(teleop_jaguar src/teleop_jaguar.cpp)
 target_link_libraries(teleop_jaguar ${GAZEBO_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
+add_executable(jaguar src/jaguar.cpp)
+target_link_libraries(jaguar ${catkin_LIBRARIES})
+
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/jaguar_ros.cpp

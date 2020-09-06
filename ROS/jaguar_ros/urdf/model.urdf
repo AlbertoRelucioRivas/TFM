@@ -57,7 +57,7 @@
   <joint name='velodyne_base_j' type='fixed'>
     <parent link="base_link"/>
     <child link="base"/>
-    <origin rpy="0      0     0" xyz="0  0  0.5"/>
+    <origin rpy="0      0     0" xyz="0  0  0.2"/>
     <axis xyz="0  0  0"/>
     <limit effort="0" lower="0" upper="0" velocity="0"/>
   </joint>
@@ -66,6 +66,12 @@
     <origin xyz="0 0 0.19"/>
     <parent link="base_link"/>
     <child link="imu_link"/>
+  </joint>
+  <joint name="ir_joint" type="fixed">
+    <axis xyz="1 0 0"/> 
+    <origin xyz="0.3 0 0.03" rpy="0 1.57 0"/>
+    <parent link="base_link"/>
+    <child link="ir_base"/>
   </joint>
   <link name="base_link">
     <inertial>
@@ -474,36 +480,58 @@
       </geometry>
     </collision>
   </link>
+  <link name="ir_base">
+    <inertial>
+      <mass value="0.001"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.0001"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+  </link>
   <gazebo reference="top">
-      <sensor type="ray" name="head_hokuyo_sensor">
-        <pose>0 0 -0.004645 0 0 0</pose>
-        <visualize>true</visualize>
-        <update_rate>30</update_rate>
-        <ray>
-          <scan>
-            <horizontal>
-              <samples>720</samples>
-              <resolution>1</resolution>
-              <min_angle>-2,355</min_angle>
-              <max_angle>+2,355</max_angle>
-            </horizontal>
-          </scan>
-          <range>
-            <min>0.05</min>
-            <max>70</max>
-            <resolution>0.02</resolution>
-          </range>
-          <noise>
-            <type>gaussian</type>
-            <mean>0.0</mean>
-            <stddev>0.02</stddev>
-          </noise>
-        </ray>
-        <plugin name="gazebo_ros_head_hokuyo_controller" filename="libgazebo_ros_laser.so">
-          <topicName>/jaguar/laser/scan</topicName>
-          <frameName>top</frameName>
-        </plugin>
-      </sensor>
+    <sensor type="gpu_ray" name="VLP16">
+      <pose>0 0 0 0 0 0</pose>
+      <visualize>false</visualize>
+      <update_rate>10</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>1875</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.1415926535897931</min_angle>
+            <max_angle>+3.1415926535897931</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>16</samples>
+            <resolution>1</resolution>
+            <min_angle>-0,261799</min_angle>
+            <max_angle>0.261799</max_angle>
+          </vertical>
+        </scan>
+        <range>
+          <min>0.3</min>
+          <max>131.0</max>
+          <resolution>0.001</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.0</stddev>
+        </noise>
+      </ray>
+      <plugin name="gazebo_ros_laser_controller" filename="libgazebo_ros_velodyne_gpu_laser.so">
+        <topicName>/jaguar/laser/scan</topicName>
+        <frameName>top</frameName>
+        <min_range>0.9</min_range>
+        <max_range>130</max_range>
+        <gaussianNoise>0.01</gaussianNoise>
+      </plugin>
+    </sensor>
   </gazebo>
 
   <gazebo reference="imu_link">
@@ -525,6 +553,43 @@
       <pose>0 0 0 0 0 0</pose>
     </sensor>
   </gazebo>
+  <gazebo reference="ir_base">        
+    <sensor type="ray" name="ir_leftabc">
+      <pose>0 0 0 0 0 0</pose>
+          <update_rate>5</update_rate>
+          <ray>
+            <scan>
+              <horizontal>
+                <samples>5</samples>
+                <resolution>1.0</resolution>
+                <min_angle>-0.25</min_angle>
+                <max_angle>0.25</max_angle>
+              </horizontal>
+              <vertical>
+                <samples>5</samples>
+                <resolution>1</resolution>
+                <min_angle>-0.25</min_angle>
+                <max_angle>0.25</max_angle>
+              </vertical>
+            </scan>
+            <range>
+              <min>0.01</min>
+              <max>0.75</max>
+              <resolution>0.01</resolution>
+            </range>
+          </ray>
+      <plugin filename="libgazebo_ros_range.so" name="gazebo_ros_range">
+         <gaussianNoise>0.005</gaussianNoise>
+         <alwaysOn>true</alwaysOn>
+         <updateRate>5</updateRate>
+         <topicName>/distance</topicName>
+         <frameName>ir_base</frameName>
+         <visualize>true</visualize>
+         <radiation>ultrasonic</radiation>
+         <fov>0.5</fov>
+      </plugin>
+    </sensor>            
+  </gazebo>
 
   <gazebo reference="left_track_j">
     <disableFixedJointLumping>true</disableFixedJointLumping>
@@ -541,6 +606,11 @@
   <gazebo reference="imu_joint">
     <disableFixedJointLumping>true</disableFixedJointLumping>
   </gazebo>
+
+  <gazebo reference="ir_joint">
+    <disableFixedJointLumping>true</disableFixedJointLumping>
+  </gazebo>
+
 
   <gazebo>
         <plugin name="jaguar_plugin" filename="/home/alberto/jaguar_plugin/build/libjaguar_plugin.so">
