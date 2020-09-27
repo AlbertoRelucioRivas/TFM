@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(gazebo REQUIRED)
+find_package(PCL REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -123,13 +124,20 @@ include
   ${catkin_INCLUDE_DIRS}
   ${GAZEBO_INCLUDE_DIRS} 
   ${SDFormat_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
+
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 add_executable(teleop_jaguar src/teleop_jaguar.cpp)
 target_link_libraries(teleop_jaguar ${GAZEBO_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
 add_executable(jaguar src/jaguar.cpp)
 target_link_libraries(jaguar ${catkin_LIBRARIES})
+
+add_executable(pointcloud src/pointcloud.cpp)
+target_link_libraries(pointcloud ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${PCL_LIBRARIES})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}

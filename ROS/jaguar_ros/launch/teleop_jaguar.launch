@@ -25,11 +25,23 @@
   <param name="use_gui" value="$(arg gui)"/>
 
   <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-file $(find jaguar_ros)/urdf/model.urdf -urdf -z 1 -model robot" />
-  <!-- start joy_node -->
+
   <node pkg="joy" type="joy_node" name="joy_node">
     <param name="_dev" value="$(arg dev)" />
-  </node> 
-    <!-- start teleop_crawler -->
+  </node>
+
+  <node name="pcl_filter" pkg="chapter6_tutorials" type="pcl_filter"
+        output="screen">
+  </node>
+
+  <node name="pcl_downsampling" pkg="chapter6_tutorials" type="pcl_downsampling"
+        output="screen">
+  </node>
+
+  <node name="pcl_stairs" pkg="chapter6_tutorials" type="pcl_stairs"
+        output="screen">
+  </node>
+
   <node pkg="jaguar_ros" type="teleop_jaguar" name="teleop_jaguar"
         output="screen" >
   </node>

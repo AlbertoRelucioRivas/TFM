@@ -34,8 +34,11 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
+#include <sensor_msgs/Range.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <actionlib/client/simple_action_client.h>
+#include <std_msgs/Int32.h>
+#include <list>
 
 namespace teleop_jaguar
 {
@@ -45,14 +48,33 @@ class Teleop
 private:
 
   ros::NodeHandle node_handle_;
-  ros::Subscriber joy_subscriber;
+  ros::Subscriber joy_subscriber,
+                  stairs_distance_subscriber,
+                  front_distance_subscriber,
+                  floor_distance_subscriber;
   ros::Publisher  flipper_publisher,
                   velocity_publisher;
   std::string     topicname_cmd_flipper,
                   topicname_cmd_vel,
                   topicname_joy,
                   framename_base_link,
-                  framename_world;
+                  framename_world,
+                  topicname_stairs_distance,
+                  topicname_front_distance,
+                  topicname_floor_distance;
+  bool  stairs_reached,
+        isClimbing,
+        descend_stairs;
+  int   start_climb_button,
+        floor_distance_peak_count,
+        floor_distance_peak_marker;
+
+  double floor_distance_peak,
+         floor_distance_peak_mean,
+         climbing_safe_factor,
+         descend_safe_factor;
+
+  std::list<double> peak_list;
 
   struct Axis
   {
@@ -119,14 +141,20 @@ public:
     // Make a nodehandle for reading parameters from the local namespace.
     ros::NodeHandle _nh("~");
     // TODO Read Topicnames and framenames
+    _nh.param<std::string>("topicname_stairs_distance", topicname_stairs_distance, "stairs_distance");
+    _nh.param<std::string>("topicname_front_distance", topicname_front_distance, "front_distance");
+    _nh.param<std::string>("topicname_floor_distance", topicname_floor_distance, "floor_distance");
     _nh.param<std::string>("topicNameJoy",        topicname_joy, "joy");
     _nh.param<std::string>("frameNameWorld",      framename_world,"world");
     _nh.param<std::string>("frameNameBaselink",   framename_base_link, 
                                                             "base_link");
-    _nh.param<std::string>("topicNameCmdvel", topicname_cmd_flipper,
+    _nh.param<std::string>("topicNameCmdflipper", topicname_cmd_flipper,
                                                           "cmd_flipper");
-    _nh.param<std::string>("topicNameCmdflipper", topicname_cmd_vel,
+    _nh.param<std::string>("topicNameCmdvel", topicname_cmd_vel,
                                                           "cmd_vel");
+    _nh.param<int>("start_climb_button", start_climb_button, 9);
+    _nh.param<double>("climbing_safe_factor", climbing_safe_factor, 1.2);
+    _nh.param<double>("descend_safe_factor", descend_safe_factor, 4.0);
 
     // Read parameters for structure velocity
     _nh.param<int>(   "speedAxis",      velocity.speed.axis, 1);
@@ -160,10 +188,18 @@ public:
 
     joy_subscriber = node_handle_.subscribe<sensor_msgs::Joy>(topicname_joy, 1,
                        boost::bind(&Teleop::joyCallback, this, _1));
+    stairs_distance_subscriber = node_handle_.subscribe<std_msgs::Int32>(topicname_stairs_distance, 1,
+                       boost::bind(&Teleop::stairsCallback, this, _1));
+    front_distance_subscriber = node_handle_.subscribe<sensor_msgs::Range>(topicname_front_distance, 1,
+                       boost::bind(&Teleop::frontCallback, this, _1));
+    floor_distance_subscriber = node_handle_.subscribe<sensor_msgs::Range>(topicname_floor_distance, 1,
+                       boost::bind(&Teleop::floorCallback, this, _1));
     velocity_publisher = node_handle_.advertise<geometry_msgs::TwistStamped>
                            (topicname_cmd_vel, 10);
     flipper_publisher  = node_handle_.advertise<geometry_msgs::TwistStamped>
                            (topicname_cmd_flipper, 10);
+
+    this->isClimbing = false;
   }
 
   ~Teleop()
@@ -181,6 +217,24 @@ public:
     else if(getDownButton(joy, flpr))
       flpr.currentAngle -= flpr.w;
     return flpr.currentAngle;
+  }
+
+  double updateCurrentFlipperAngle(Flipper& flpr, double angle)
+  {
+    flpr.currentAngle = angle;
+    return flpr.currentAngle;
+  }
+
+  bool check_climb_start(const sensor_msgs::JoyConstPtr& joy)
+  {
+    if(this->stairs_reached)
+    {
+      if(joy->buttons[this->start_climb_button] > 0)
+      {
+        return true;
+      }
+    }
+    return false;
   }
 
   void publish_flipper(void)
@@ -207,24 +261,147 @@ public:
 */
   }
 
-  void joyCallback(const sensor_msgs::JoyConstPtr &joy)
+  void frontCallback(const sensor_msgs::RangeConstPtr &rng)
   {
-    // Publish about velocity
+    if(rng->range < 0.06)
+      this->stairs_reached = true;
+    else
+      this->stairs_reached = false;
+  }
+
+  void stairsCallback(const std_msgs::Int32::ConstPtr& distance)
+  {
+    if(distance->data > 100 && !this->stairs_reached)
+      ROS_INFO("Distance YES");
+    else
+      if(this->stairs_reached)
+        ROS_INFO("READY TO CLIMB");
+  }
+
+  void floorCallback(const sensor_msgs::RangeConstPtr &rng)
+  {
+    if(this->isClimbing)
+    {
+      if(double(rng->range) > this->floor_distance_peak)
+      {
+        this->floor_distance_peak = double(rng->range);
+        this->floor_distance_peak_marker = this->floor_distance_peak_count;
+        //ROS_INFO("New PEAK: %lf in count:%d", this->floor_distance_peak, this->floor_distance_peak_marker);
+      }
+      if(this->floor_distance_peak_count - this->floor_distance_peak_marker > 10)
+      {
+        this->peak_list.push_back(this->floor_distance_peak);
+        double avg = 0;
+        std::list<double>::iterator it;
+        for(it = this->peak_list.begin(); it != this->peak_list.end(); it++) 
+        {
+          avg += *it;
+        }
+        avg /= this->peak_list.size();
+        this->floor_distance_peak_mean = avg;
+        if(this->peak_list.size() > 30){
+          this->peak_list.pop_front();
+        }
+        //ROS_INFO("AVG %lf in count:%d", this->floor_distance_peak_mean, this->floor_distance_peak_count);
+      }
+      if(double(rng->range) > this->climbing_safe_factor * this->floor_distance_peak_mean && this->floor_distance_peak_count > 30 && this->floor_distance_peak_mean > 0)
+        {
+          stop();
+        }
+      this->floor_distance_peak_count += 1;
+    }
+    else
+    {
+      if(double(rng->range) > this->descend_safe_factor * this->floor_distance_peak_mean && this->floor_distance_peak_mean > 0)
+        {
+          this->descend_stairs = true;
+          stop();
+        }
+      if(this->descend_stairs)
+        {
+          ROS_INFO("DESCEND STAIRS DETECTED %lf", double(rng->range));
+        }
+
+      this->peak_list.push_back(double(rng->range));
+      double avg = 0;
+      std::list<double>::iterator it;
+      for(it = this->peak_list.begin(); it != this->peak_list.end(); it++) 
+      {
+        avg += *it;
+      }
+      avg /= this->peak_list.size();
+      this->floor_distance_peak_mean = avg;
+      if(this->peak_list.size() > 50){
+        this->peak_list.pop_front();
+      }
+      //ROS_INFO("AVG %lf", this->floor_distance_peak_mean);  
+    }
+  }
+
+  void setClimbFlippers()
+  {
+    updateCurrentFlipperAngle(flipper.fr, 0);
+    updateCurrentFlipperAngle(flipper.fl, 0);
+    publish_flipper();
+    ros::Duration(2).sleep();
+    updateCurrentFlipperAngle(flipper.rr, 0);
+    updateCurrentFlipperAngle(flipper.rl, 0);
+    publish_flipper();
+  }
+
+  void resetVariables()
+  {
+    this->isClimbing = true;
+    this->floor_distance_peak = 0.0;
+    this->floor_distance_peak_count = 0;
+    this->peak_list = {};
+    this->floor_distance_peak_marker = 0;
+    this->floor_distance_peak_mean = 0;
+  }
+
+  void startClimbing(int vel)
+  {
     geometry_msgs::TwistStamped vel_ts;
     vel_ts.header.frame_id = framename_base_link;
     vel_ts.header.stamp = ros::Time::now();
-    vel_ts.twist.linear.x  = getAxis(joy, velocity.speed);
+    vel_ts.twist.linear.x  = vel * velocity.speed.factor;
     vel_ts.twist.linear.y  = vel_ts.twist.linear.z  = 0;
-    vel_ts.twist.angular.x = vel_ts.twist.angular.y = 0;
-    vel_ts.twist.angular.z = getAxis(joy, velocity.turn)
-                                            *((vel_ts.twist.linear.x<0)?-1:1);
+    vel_ts.twist.angular.x = vel_ts.twist.angular.y = vel_ts.twist.angular.z = 0;
     velocity_publisher.publish(vel_ts);
+  }
+
+  void joyCallback(const sensor_msgs::JoyConstPtr &joy)
+  {
+    // Publish about velocity
+    if(!this->isClimbing && !this->descend_stairs)
+    {
+      geometry_msgs::TwistStamped vel_ts;
+      vel_ts.header.frame_id = framename_base_link;
+      vel_ts.header.stamp = ros::Time::now();
+      vel_ts.twist.linear.x  = getAxis(joy, velocity.speed);
+      vel_ts.twist.linear.y  = vel_ts.twist.linear.z  = 0;
+      vel_ts.twist.angular.x = vel_ts.twist.angular.y = 0;
+      vel_ts.twist.angular.z = getAxis(joy, velocity.turn)
+                                              *((vel_ts.twist.linear.x<0)?-1:1);
+      velocity_publisher.publish(vel_ts);
+      }
     // Publish about flippers
-    updateCurrentFlipperAngle(flipper.fr, joy);
-    updateCurrentFlipperAngle(flipper.fl, joy);
-    updateCurrentFlipperAngle(flipper.rr, joy);
-    updateCurrentFlipperAngle(flipper.rl, joy);
-    publish_flipper();
+    
+    if(check_climb_start(joy))
+    {
+      resetVariables();
+      setClimbFlippers();
+      startClimbing(1);
+    }
+    else if(!this->isClimbing && !this->descend_stairs)
+    {
+      updateCurrentFlipperAngle(flipper.fr, joy);
+      updateCurrentFlipperAngle(flipper.fl, joy);
+      updateCurrentFlipperAngle(flipper.rr, joy);
+      updateCurrentFlipperAngle(flipper.rl, joy);
+      publish_flipper();
+    }
+    
   }
 
   double getAxis(const sensor_msgs::JoyConstPtr &joy, const Axis &axis)
