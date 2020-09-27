@@ -1,0 +1,28 @@
+#PS-DS4 controller axis numbers and buttun numbers in the joy topics.
+---
+#velorosity
+speedAxis     : 3
+turnAxis      : 2
+maxSpeed      : 500
+#maxTurnW      : 1.570796327
+#flipper.fr
+frUpButton    : 5
+frDownButton  : 3
+#frW           : 0.314
+frDefaultAngle: 0.
+#flipper.fl
+flUpButton    : 5
+flDownButton  : 3
+#flW           : 0.314
+flDefaultAngle: 0.
+#flipper.rr
+rrUpButton    : 4
+rrDownButton  : 2
+#rrW           : 0.314
+rrDefaultAngle: 0.
+#flipper.rl
+rlUpButton    : 4
+rlDownButton  : 2
+#rlW           : 0.314
+rlDefaultAngle: 0.
+...

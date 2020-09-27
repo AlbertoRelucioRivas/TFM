@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/" >
+        <file>images/icon.png</file>
+	<file>images/guiGate.png</file>
+	<file>images/icon1.png</file>
+	<file>images/icon2.png</file>
+	<file>images/icon_controller.png</file>
+	<file>images/motionpower.png</file>
+	<file>images/pathedit.png</file>
+    </qresource>
+</RCC>
